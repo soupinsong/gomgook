@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
+    <title>딸깍 사전</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- 상단 바 (드래그로 이동) -->
+    <header class="titlebar">
+      <div class="title">📎 딸깍 사전</div>
+      <div class="titlebar-buttons">
+        <button id="btn-pin" class="tb-btn" title="항상 위 고정 켜기/끄기">📌</button>
+        <button id="btn-settings" class="tb-btn" title="설정">⚙</button>
+        <button id="btn-min" class="tb-btn" title="최소화">—</button>
+        <button id="btn-close" class="tb-btn tb-close" title="닫기">✕</button>
+      </div>
+    </header>
+
+    <!-- 본문 -->
+    <main class="content">
+      <!-- 선택된 원문 -->
+      <section id="source-box" class="source-box hidden">
+        <div class="source-label">선택한 원문</div>
+        <div id="source-text" class="source-text"></div>
+        <button id="btn-lookup" class="lookup-btn">🔍 다시 풀이</button>
+      </section>
+
+      <!-- 예시 이미지 -->
+      <section id="image-box" class="image-box hidden">
+        <img id="image-img" alt="예시 이미지" />
+        <div id="image-cap" class="image-cap"></div>
+      </section>
+
+      <!-- 결과 -->
+      <section id="result" class="result">
+        <div class="empty-state" id="empty-state">
+          <p>논문에서 단어·문장을 <b>드래그해서 복사(Ctrl+C)</b>하면</p>
+          <p>여기에 번역과 쉬운 풀이가 나타나요.</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- 상태 표시줄 -->
+    <footer class="statusbar">
+      <span id="status">준비됨</span>
+      <span id="model-badge" class="model-badge"></span>
+    </footer>
+
+    <!-- 설정 패널 -->
+    <div id="settings-panel" class="settings-panel hidden">
+      <div class="settings-header">
+        <h2>설정</h2>
+        <button id="btn-settings-close" class="tb-btn">✕</button>
+      </div>
+
+      <label class="field">
+        <span>엔진</span>
+        <select id="in-provider">
+          <option value="gemini">🆓 Gemini (무료 · 기본)</option>
+          <option value="claude">💳 Claude (유료 · 더 안정적)</option>
+        </select>
+      </label>
+
+      <!-- Gemini(무료) 설정 -->
+      <div id="block-gemini" class="provider-block">
+        <label class="field">
+          <span>Gemini API 키</span>
+          <input id="in-gemini-key" type="password" placeholder="AIza..." />
+          <small id="env-hint-gemini" class="hint"></small>
+          <small class="hint">
+            발급: aistudio.google.com/apikey (구글 로그인 → Create API key, 카드 불필요)
+          </small>
+        </label>
+        <label class="field">
+          <span>모델</span>
+          <select id="in-gemini-model">
+            <option value="gemini-flash-latest">최신 Flash (자동)</option>
+          </select>
+          <button type="button" id="btn-refresh-models" class="lookup-btn">
+            🔄 내 키로 쓸 수 있는 모델 불러오기
+          </button>
+          <small id="models-hint" class="hint"></small>
+        </label>
+      </div>
+
+      <!-- Claude(유료) 설정 -->
+      <div id="block-claude" class="provider-block hidden">
+        <label class="field">
+          <span>Anthropic API 키</span>
+          <input id="in-claude-key" type="password" placeholder="sk-ant-..." />
+          <small id="env-hint-claude" class="hint"></small>
+        </label>
+        <label class="field">
+          <span>모델</span>
+          <select id="in-claude-model">
+            <option value="claude-sonnet-4-6">Sonnet 4.6 (빠름)</option>
+            <option value="claude-opus-4-8">Opus 4.8 (더 깊은 설명)</option>
+            <option value="claude-haiku-4-5">Haiku 4.5 (가장 저렴)</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="field">
+        <span>설명 눈높이</span>
+        <input id="in-level" type="text" placeholder="예: 고등학교 1학년" />
+      </label>
+      <label class="field checkbox">
+        <input id="in-auto" type="checkbox" />
+        <span>복사하면 자동으로 풀이 시작</span>
+      </label>
+      <button id="btn-save" class="save-btn">저장</button>
+      <p class="settings-note">
+        키는 이 PC에만 저장됩니다. 언제든 엔진을 무료↔유료로 바꿀 수 있어요.
+      </p>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+{
+  "name": "ttalkak-dict",
+  "version": "0.1.0",
+  "description": "딸깍 사전 — 논문 읽기용 항상 위 번역·용어 풀이 도구 (생물학/정보학/유전체학)",
+  "main": "main.js",
+  "author": "수빈",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.subin.ttalkakdict",
+    "productName": "딸깍사전",
+    "win": {
+      "target": "portable"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**"
+    ]
+  }
+}
