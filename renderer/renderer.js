@@ -11,6 +11,9 @@ const el = {
   imageCap: $('image-cap'),
   result: $('result'),
   emptyState: $('empty-state'),
+  followup: $('followup'),
+  followupInput: $('followup-input'),
+  followupSend: $('followup-send'),
   status: $('status'),
   modelBadge: $('model-badge'),
   // 타이틀바
@@ -42,7 +45,10 @@ let currentRequestId = 0;
 let currentText = '';
 let currentContext = null; // 문장 속 단어 모드일 때 부모 문장
 let contextSentence = ''; // 최근에 풀이한 '문장'(문맥 기억용)
-let rawBuffer = '';
+let currentAnswerEl = null; // 지금 스트리밍 중인 답변 DOM
+let currentAnswerRaw = ''; // 그 답변의 마크다운 버퍼
+let isStreaming = false;
+let threadActive = false; // 첫 풀이가 한 번이라도 끝났는지
 
 // ---------------------------------------------------------------------------
 // 아주 작은 마크다운 → HTML (## 제목, - 목록, **굵게**, `코드`)
@@ -116,22 +122,66 @@ function renderSource(text, context) {
 }
 
 // ---------------------------------------------------------------------------
-// 조회 시작
+// 답변 블록 생성/스트리밍 관리
+// ---------------------------------------------------------------------------
+function beginAnswerBlock() {
+  const div = document.createElement('div');
+  div.className = 'answer';
+  div.innerHTML = '<span class="cursor"></span>';
+  el.result.appendChild(div);
+  currentAnswerEl = div;
+  currentAnswerRaw = '';
+  isStreaming = true;
+  el.followupSend.disabled = true;
+  el.result.scrollTop = el.result.scrollHeight;
+}
+
+function endStreaming(statusText) {
+  isStreaming = false;
+  el.followupSend.disabled = false;
+  setStatus(statusText);
+}
+
+// ---------------------------------------------------------------------------
+// 조회 시작 (새 선택 → 대화 초기화)
 // ---------------------------------------------------------------------------
 function startLookup(text, context) {
   if (!text) return;
   currentText = text;
   currentContext = context || null;
   currentRequestId += 1;
-  rawBuffer = '';
+  threadActive = false;
 
   el.emptyState.classList.add('hidden');
   el.imageBox.classList.add('hidden'); // 이전 이미지 감추기
+  el.followup.classList.add('hidden'); // 첫 답 끝나면 다시 표시
+  el.result.innerHTML = ''; // 대화 스레드 초기화
   renderSource(text, context);
-  el.result.innerHTML = '<span class="cursor"></span>';
+  beginAnswerBlock();
   setStatus(context ? '문맥 풀이 중…' : '풀이 중…');
 
   window.api.lookup(currentRequestId, text, context);
+}
+
+// ---------------------------------------------------------------------------
+// 추가 질문 (대화 이어가기)
+// ---------------------------------------------------------------------------
+function askFollowup() {
+  const q = el.followupInput.value.trim();
+  if (!q || isStreaming || !threadActive) return;
+  currentRequestId += 1;
+
+  // 내 질문 말풍선
+  const bubble = document.createElement('div');
+  bubble.className = 'q-bubble';
+  bubble.textContent = q;
+  el.result.appendChild(bubble);
+
+  beginAnswerBlock();
+  el.followupInput.value = '';
+  setStatus('답하는 중…');
+
+  window.api.ask(currentRequestId, q);
 }
 
 // 선택 텍스트를 보고 '문장 모드' vs '문장 속 단어 모드' 결정
@@ -160,24 +210,31 @@ function handleSelection(text) {
 // 스트리밍 수신
 // ---------------------------------------------------------------------------
 window.api.onChunk(({ requestId, delta }) => {
-  if (requestId !== currentRequestId) return;
-  rawBuffer += delta;
-  el.result.innerHTML = renderMarkdown(rawBuffer) + '<span class="cursor"></span>';
+  if (requestId !== currentRequestId || !currentAnswerEl) return;
+  currentAnswerRaw += delta;
+  currentAnswerEl.innerHTML =
+    renderMarkdown(currentAnswerRaw) + '<span class="cursor"></span>';
   el.result.scrollTop = el.result.scrollHeight;
 });
 
 window.api.onDone(({ requestId }) => {
-  if (requestId !== currentRequestId) return;
-  el.result.innerHTML = renderMarkdown(rawBuffer);
-  setStatus('완료');
+  if (requestId !== currentRequestId || !currentAnswerEl) return;
+  currentAnswerEl.innerHTML = renderMarkdown(currentAnswerRaw);
+  threadActive = true;
+  el.followup.classList.remove('hidden');
+  endStreaming('완료');
+  el.followupInput.focus();
+  el.result.scrollTop = el.result.scrollHeight;
 });
 
 window.api.onError(({ requestId, message }) => {
-  if (requestId !== currentRequestId) return;
-  el.result.innerHTML = `<p style="color:var(--danger)">⚠ ${escapeHtml(
+  if (requestId !== currentRequestId || !currentAnswerEl) return;
+  currentAnswerEl.innerHTML = `<p style="color:var(--danger)">⚠ ${escapeHtml(
     message
   )}</p>`;
-  setStatus('오류');
+  // 대화가 이미 진행 중이었다면 추가 질문은 계속 가능하게
+  if (threadActive) el.followup.classList.remove('hidden');
+  endStreaming('오류');
 });
 
 // ---------------------------------------------------------------------------
@@ -210,6 +267,13 @@ window.api.onImage(({ requestId, dataUrl, title, pageUrl }) => {
 // 버튼
 // ---------------------------------------------------------------------------
 el.btnLookup.addEventListener('click', () => handleSelection(currentText));
+el.followupSend.addEventListener('click', askFollowup);
+el.followupInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    askFollowup();
+  }
+});
 el.btnClose.addEventListener('click', () => window.api.close());
 el.btnMin.addEventListener('click', () => window.api.minimize());
 el.btnPin.addEventListener('click', async () => {

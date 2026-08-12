@@ -234,6 +234,65 @@ body {
   }
 }
 
+/* 대화 스레드 */
+.answer {
+  margin-bottom: 4px;
+}
+.q-bubble {
+  margin: 14px 0 8px;
+  padding: 7px 10px;
+  background: var(--bg-3);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  word-break: break-word;
+}
+.q-bubble::before {
+  content: "질문  ";
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 추가 질문 입력바 */
+.followup {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-2);
+  border-top: 1px solid var(--border);
+}
+.followup input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--fg);
+  font-size: 13px;
+}
+.followup input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.followup-send {
+  background: var(--accent);
+  color: #0e1116;
+  border: none;
+  border-radius: 8px;
+  width: 40px;
+  font-size: 15px;
+  cursor: pointer;
+}
+.followup-send:hover {
+  filter: brightness(1.08);
+}
+.followup-send:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 /* 상태바 */
 .statusbar {
   display: flex;

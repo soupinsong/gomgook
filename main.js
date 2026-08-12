@@ -150,62 +150,48 @@ function startClipboardWatch() {
 // ---------------------------------------------------------------------------
 // 프롬프트
 // ---------------------------------------------------------------------------
+// 고정 페르소나(멀티턴 내내 유지). 형식 지시는 각 첫 메시지에 담는다.
 function buildSystemPrompt() {
   const domains = settings.domains.join(', ');
   return [
-    `너는 "딸깍 사전"이야. 사용자는 ${domains} 분야의 논문(주로 영어)을 읽는 학생이고,`,
-    `너는 사용자가 드래그해서 복사한 텍스트 조각(단어·구·문장·문단)을 받아 한국어로 풀어 설명해.`,
-    ``,
-    `항상 아래 순서의 한국어 마크다운으로만 답해. 잡담·인사·서론 없이 바로 시작해:`,
+    `너는 "딸깍 사전"이야. ${domains} 분야의 논문(주로 영어)을 읽는 학생을 돕는다.`,
+    `모든 답은 한국어로, ${settings.level} 눈높이의 쉬운 말과 비유로 설명해. 어려운 말을 또 어려운 말로 풀지 마.`,
+    `문맥(생물학/정보학/유전체학 중 어디에 가까운지)을 파악해서 그 분야에서의 의미로 설명하고,`,
+    `같은 단어라도 이 분야에서 특수하게 쓰이면 그 쓰임을 알려줘 (예: "expression"=발현).`,
+    `이어지는 추가 질문에는 앞의 내용을 기억한 채로, 물어본 것에 바로 답해줘.`,
+    `잡담·인사·불필요한 반복 없이 짧고 밀도 있게. 마크다운을 써.`,
+  ].join('\n');
+}
+
+// 일반 모드 첫 메시지 (형식 포함)
+function userMessage(text) {
+  return [
+    `다음 텍스트를 아래 형식으로 풀어서 설명해줘:`,
     ``,
     `## 번역`,
-    `- 자연스러운 한국어 번역. 이미 한국어면 핵심을 한 줄로 다시 정리.`,
-    ``,
+    `- 자연스러운 한국어 번역 (이미 한국어면 핵심을 한 줄로).`,
     `## 핵심 용어`,
-    `- 전문용어마다 "용어 — 이 문맥에서의 뜻 / ${settings.level} 눈높이의 쉬운 설명(비유 활용)" 형식.`,
-    `- 이 조각에서 실제로 중요한 용어만 골라. 최대 4~5개.`,
-    ``,
+    `- 중요한 전문용어마다 "용어 — 이 문맥에서의 뜻 / 쉬운 설명" (최대 4~5개).`,
     `## 한 줄 정리`,
-    `- 이 조각이 결국 무슨 말인지 한 문장으로.`,
+    `- 결국 무슨 말인지 한 문장으로.`,
     ``,
-    `규칙:`,
-    `- 설명은 ${settings.level} 수준의 쉬운 말과 비유로. 어려운 말을 또 어려운 말로 풀지 마.`,
-    `- 문맥(생물학/정보학/유전체학 중 어디에 가까운지)을 파악해서 그 분야에서의 의미로 설명해.`,
-    `- 같은 단어라도 이 분야에서 특수하게 쓰이면 그 쓰임을 알려줘 (예: "expression"=발현).`,
-    `- 짧고 밀도 있게. 불필요한 반복 금지.`,
+    `"""${text}"""`,
   ].join('\n');
 }
 
-function userMessage(text) {
-  return `다음 텍스트를 풀어서 설명해줘:\n\n"""${text}"""`;
-}
-
-// 문장 안의 특정 단어/구를 "그 문맥에서" 풀이하는 모드
-function buildWordSystemPrompt() {
-  return [
-    `너는 "딸깍 사전"이야. 사용자는 방금 어떤 문장을 보고, 그 안의 특정 단어(또는 구)를 다시 골랐어.`,
-    `그 단어가 "이 문장 안에서" 어떤 뜻으로 쓰였는지 콕 집어 설명해. 문장 전체를 다시 번역하지는 마.`,
-    ``,
-    `아래 순서의 한국어 마크다운으로만, 서론 없이 바로 답해:`,
-    ``,
-    `## 이 문맥에서의 뜻`,
-    `- 이 문장에서 고른 단어가 가리키는 정확한 의미를 한두 줄로.`,
-    ``,
-    `## 쉬운 풀이`,
-    `- ${settings.level} 눈높이의 비유로 풀어서.`,
-    ``,
-    `## 참고`,
-    `- 다른 분야나 일상에서 쓰일 때의 뜻과 어떻게 다른지 (있을 때만, 없으면 생략).`,
-    ``,
-    `규칙: 짧고 밀도 있게. 고른 단어에만 집중.`,
-  ].join('\n');
-}
-
+// 문장 속 단어 모드 첫 메시지 (형식 포함)
 function userMessageWord(word, sentence) {
   return [
     `문장: """${sentence}"""`,
     ``,
-    `이 문장 안에서 다음 부분이 어떤 뜻으로 쓰였는지 설명해줘: «${word}»`,
+    `이 문장 안에서 «${word}»가 어떤 뜻으로 쓰였는지 아래 형식으로 설명해줘. 문장 전체 번역은 반복하지 마.`,
+    ``,
+    `## 이 문맥에서의 뜻`,
+    `- 이 문장에서 «${word}»가 가리키는 정확한 의미 (한두 줄).`,
+    `## 쉬운 풀이`,
+    `- 비유를 곁들여서.`,
+    `## 참고`,
+    `- 다른 분야·일상에서의 뜻과 어떻게 다른지 (있을 때만).`,
   ].join('\n');
 }
 
@@ -312,21 +298,23 @@ function isModelUnavailable(status, rawMsg) {
 }
 
 // ---------------------------------------------------------------------------
-// Gemini (무료) 스트리밍
+// Gemini (무료) 스트리밍 — turns 전체를 받아 멀티턴 지원. 성공 시 전체 답 반환.
 // ---------------------------------------------------------------------------
-async function runGeminiLookup(event, requestId, apiKey, systemPrompt, userText, retried) {
+async function streamGemini(event, requestId, apiKey, system, turns, retried) {
   const model = settings.gemini.model;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
 
   const generationConfig = { maxOutputTokens: 2000, temperature: 0.3 };
-  // 2.5 계열은 기본으로 '생각'을 해서 느려질 수 있어 딸깍 속도용으로 끔
   if (model.includes('2.5')) {
     generationConfig.thinkingConfig = { thinkingBudget: 0 };
   }
 
   const payload = {
-    systemInstruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userText }] }],
+    systemInstruction: { parts: [{ text: system }] },
+    contents: turns.map((t) => ({
+      role: t.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: t.content }],
+    })),
     generationConfig,
   };
 
@@ -342,7 +330,7 @@ async function runGeminiLookup(event, requestId, apiKey, systemPrompt, userText,
       requestId,
       message: '네트워크 연결을 확인해 주세요.',
     });
-    return;
+    return null;
   }
 
   if (!res.ok) {
@@ -358,11 +346,9 @@ async function runGeminiLookup(event, requestId, apiKey, systemPrompt, userText,
       const list = await fetchGeminiModelList(apiKey);
       const best = list.ok && list.models[0] ? list.models[0].id : null;
       if (best && best !== model) {
-        settings = saveSettings({
-          gemini: { ...settings.gemini, model: best },
-        });
+        settings = saveSettings({ gemini: { ...settings.gemini, model: best } });
         event.sender.send('model-changed', { model: best });
-        return runGeminiLookup(event, requestId, apiKey, systemPrompt, userText, true);
+        return streamGemini(event, requestId, apiKey, system, turns, true);
       }
     }
 
@@ -375,11 +361,12 @@ async function runGeminiLookup(event, requestId, apiKey, systemPrompt, userText,
       message = raw;
     }
     event.sender.send('lookup-error', { requestId, message });
-    return;
+    return null;
   }
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let full = '';
   try {
     for await (const chunk of res.body) {
       buffer += decoder.decode(chunk, { stream: true });
@@ -394,42 +381,51 @@ async function runGeminiLookup(event, requestId, apiKey, systemPrompt, userText,
           const json = JSON.parse(data);
           const parts = json?.candidates?.[0]?.content?.parts || [];
           const delta = parts.map((p) => p.text || '').join('');
-          if (delta) event.sender.send('lookup-chunk', { requestId, delta });
+          if (delta) {
+            full += delta;
+            event.sender.send('lookup-chunk', { requestId, delta });
+          }
         } catch {
           /* 부분 JSON 무시 */
         }
       }
     }
-    event.sender.send('lookup-done', { requestId });
+    return full;
   } catch {
     event.sender.send('lookup-error', {
       requestId,
       message: '응답을 받는 중 문제가 생겼어요. 다시 시도해 주세요.',
     });
+    return null;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Claude (유료) 스트리밍
+// Claude (유료) 스트리밍 — turns 전체를 받아 멀티턴 지원. 성공 시 전체 답 반환.
 // ---------------------------------------------------------------------------
-async function runClaudeLookup(event, requestId, apiKey, systemPrompt, userText) {
+async function streamClaude(event, requestId, apiKey, system, turns) {
   const client = new Anthropic({ apiKey });
+  let full = '';
   try {
     const stream = client.messages.stream({
       model: settings.claude.model,
       max_tokens: 2000,
       thinking: { type: 'disabled' },
       output_config: { effort: 'low' },
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userText }],
+      system,
+      messages: turns.map((t) => ({
+        role: t.role === 'assistant' ? 'assistant' : 'user',
+        content: t.content,
+      })),
     });
 
     stream.on('text', (delta) => {
+      full += delta;
       event.sender.send('lookup-chunk', { requestId, delta });
     });
 
     await stream.finalMessage();
-    event.sender.send('lookup-done', { requestId });
+    return full;
   } catch (err) {
     let message = err && err.message ? err.message : String(err);
     if (err instanceof Anthropic.AuthenticationError) {
@@ -440,10 +436,16 @@ async function runClaudeLookup(event, requestId, apiKey, systemPrompt, userText)
       message = '네트워크 연결을 확인해 주세요.';
     }
     event.sender.send('lookup-error', { requestId, message });
+    return null;
   }
 }
 
-async function runLookup(event, requestId, text, context) {
+// ---------------------------------------------------------------------------
+// 대화 상태 (한 창 = 한 대화). 새 조회 때 초기화, 추가 질문은 이어붙임.
+// ---------------------------------------------------------------------------
+let convo = { system: '', turns: [] };
+
+async function converse(event, requestId) {
   const provider = settings.provider;
   const apiKey = resolveKey(provider);
   if (!apiKey) {
@@ -454,17 +456,25 @@ async function runLookup(event, requestId, text, context) {
     });
     return;
   }
+  const full =
+    provider === 'gemini'
+      ? await streamGemini(event, requestId, apiKey, convo.system, convo.turns, false)
+      : await streamClaude(event, requestId, apiKey, convo.system, convo.turns);
 
-  // 문장 안 단어 재선택 모드 vs 일반 모드
-  let systemPrompt;
-  let userText;
-  if (context && context !== text) {
-    systemPrompt = buildWordSystemPrompt();
-    userText = userMessageWord(text, context);
-  } else {
-    systemPrompt = buildSystemPrompt();
-    userText = userMessage(text);
+  if (full != null) {
+    convo.turns.push({ role: 'assistant', content: full });
+    event.sender.send('lookup-done', { requestId });
   }
+}
+
+// 새 조회 (문장/단어 선택)
+async function runLookup(event, requestId, text, context) {
+  const system = buildSystemPrompt();
+  const firstUser =
+    context && context !== text
+      ? userMessageWord(text, context)
+      : userMessage(text);
+  convo = { system, turns: [{ role: 'user', content: firstUser }] };
 
   // 용어(짧은 선택)면 위키백과 예시 이미지도 병렬로 조회 (실패해도 무시)
   if (wordCount(text) <= 4) {
@@ -473,10 +483,20 @@ async function runLookup(event, requestId, text, context) {
     });
   }
 
-  if (provider === 'gemini') {
-    return runGeminiLookup(event, requestId, apiKey, systemPrompt, userText);
+  return converse(event, requestId);
+}
+
+// 추가 질문 (이전 대화 맥락 유지)
+async function runAsk(event, requestId, question) {
+  if (!convo.turns.length) {
+    event.sender.send('lookup-error', {
+      requestId,
+      message: '먼저 단어나 문장을 풀이해 주세요.',
+    });
+    return;
   }
-  return runClaudeLookup(event, requestId, apiKey, systemPrompt, userText);
+  convo.turns.push({ role: 'user', content: question });
+  return converse(event, requestId);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +520,10 @@ ipcMain.handle('save-settings', (_e, next) => {
 
 ipcMain.on('lookup', (event, { requestId, text, context }) => {
   runLookup(event, requestId, text, context);
+});
+
+ipcMain.on('ask', (event, { requestId, question }) => {
+  runAsk(event, requestId, question);
 });
 
 ipcMain.handle('list-gemini-models', async () => {

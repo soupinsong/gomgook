@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('api', {
   // 조회 (스트리밍)
   lookup: (requestId, text, context) =>
     ipcRenderer.send('lookup', { requestId, text, context }),
+  ask: (requestId, question) =>
+    ipcRenderer.send('ask', { requestId, question }),
   onChunk: (cb) => ipcRenderer.on('lookup-chunk', (_e, p) => cb(p)),
   onDone: (cb) => ipcRenderer.on('lookup-done', (_e, p) => cb(p)),
   onError: (cb) => ipcRenderer.on('lookup-error', (_e, p) => cb(p)),
