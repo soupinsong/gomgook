@@ -36,4 +36,13 @@ contextBridge.exposeInMainWorld('api', {
 
   // 외부 링크 열기
   openExternal: (url) => ipcRenderer.send('open-external', url),
+
+  // 논문 노트 라이브러리
+  libList: () => ipcRenderer.invoke('lib-list'),
+  libCreate: (title) => ipcRenderer.invoke('lib-create', title),
+  libSelect: (id) => ipcRenderer.invoke('lib-select', id),
+  libRename: (id, title) => ipcRenderer.invoke('lib-rename', { id, title }),
+  libDelete: (id) => ipcRenderer.invoke('lib-delete', id),
+  libGet: (id) => ipcRenderer.invoke('lib-get', id),
+  onPaperUpdated: (cb) => ipcRenderer.on('paper-updated', (_e, p) => cb(p)),
 });

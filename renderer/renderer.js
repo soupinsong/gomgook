@@ -16,6 +16,19 @@ const el = {
   followupSend: $('followup-send'),
   status: $('status'),
   modelBadge: $('model-badge'),
+  // 논문 노트
+  paperbar: $('paperbar'),
+  paperName: $('paper-name'),
+  paperCount: $('paper-count'),
+  libraryPanel: $('library-panel'),
+  btnLibraryClose: $('btn-library-close'),
+  libNewTitle: $('lib-new-title'),
+  libNewBtn: $('lib-new-btn'),
+  libList: $('lib-list'),
+  notebookPanel: $('notebook-panel'),
+  btnNotebookBack: $('btn-notebook-back'),
+  notebookTitle: $('notebook-title'),
+  notebookBody: $('notebook-body'),
   // 타이틀바
   btnTrigger: $('btn-trigger'),
   btnPin: $('btn-pin'),
@@ -475,9 +488,236 @@ el.btnSave.addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// 논문 노트 라이브러리
+// ---------------------------------------------------------------------------
+let libMeta = { currentId: null, papers: [] };
+
+function currentPaperMeta() {
+  return libMeta.papers.find((p) => p.id === libMeta.currentId);
+}
+
+function refreshPaperbar() {
+  const p = currentPaperMeta();
+  el.paperName.textContent = p ? p.title : '기본 노트';
+  el.paperName.title = p ? p.title : '';
+  el.paperCount.textContent = p ? `· 기록 ${p.count}` : '';
+}
+
+async function loadLib() {
+  libMeta = await window.api.libList();
+  refreshPaperbar();
+}
+
+function mkMini(txt, title, fn) {
+  const b = document.createElement('button');
+  b.className = 'mini';
+  b.textContent = txt;
+  b.title = title;
+  b.addEventListener('click', fn);
+  return b;
+}
+
+function startRename(titleEl, p) {
+  const input = document.createElement('input');
+  input.className = 'paper-title-input';
+  input.value = p.title;
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    renamePaper(p.id, input.value.trim() || p.title);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commit();
+    } else if (e.key === 'Escape') {
+      done = true;
+      renderLibList();
+    }
+  });
+  input.addEventListener('blur', commit);
+}
+
+function renderLibList() {
+  el.libList.innerHTML = '';
+  if (!libMeta.papers.length) {
+    el.libList.innerHTML =
+      '<p class="lib-hint">아직 논문이 없어요. 위에서 만들어 보세요.</p>';
+    return;
+  }
+  for (const p of libMeta.papers) {
+    const row = document.createElement('div');
+    row.className = 'paper-row' + (p.id === libMeta.currentId ? ' current' : '');
+
+    const top = document.createElement('div');
+    top.className = 'paper-row-top';
+
+    const title = document.createElement('div');
+    title.className = 'paper-title';
+    title.textContent = p.title;
+    title.title = '클릭해서 이 논문 선택';
+    title.addEventListener('click', () => selectPaper(p.id));
+
+    top.append(
+      title,
+      mkMini('📖', '노트 보기', () => openNotebook(p.id)),
+      mkMini('✎', '이름 바꾸기', () => startRename(title, p)),
+      mkMini('🗑', '삭제', () => deletePaper(p.id))
+    );
+
+    const meta = document.createElement('div');
+    meta.className = 'paper-meta';
+    meta.innerHTML =
+      `기록 ${p.count} · 용어 ${p.terms}` +
+      (p.id === libMeta.currentId ? ' · <span class="cur-tag">현재 논문</span>' : '');
+
+    row.append(top, meta);
+    el.libList.appendChild(row);
+  }
+}
+
+async function openLibrary() {
+  libMeta = await window.api.libList();
+  renderLibList();
+  el.libraryPanel.classList.remove('hidden');
+}
+
+async function createPaper() {
+  const t = el.libNewTitle.value.trim();
+  libMeta = await window.api.libCreate(t || '새 논문');
+  el.libNewTitle.value = '';
+  renderLibList();
+  refreshPaperbar();
+  setStatus(`새 논문: ${currentPaperMeta()?.title || ''}`);
+}
+
+async function selectPaper(id) {
+  libMeta = await window.api.libSelect(id);
+  refreshPaperbar();
+  el.libraryPanel.classList.add('hidden');
+  setStatus(`논문 전환: ${currentPaperMeta()?.title || ''}`);
+}
+
+async function renamePaper(id, title) {
+  libMeta = await window.api.libRename(id, title);
+  renderLibList();
+  refreshPaperbar();
+}
+
+async function deletePaper(id) {
+  if (!window.confirm('이 논문 노트를 삭제할까요? 되돌릴 수 없어요.')) return;
+  libMeta = await window.api.libDelete(id);
+  renderLibList();
+  refreshPaperbar();
+}
+
+async function openNotebook(id) {
+  const p = await window.api.libGet(id);
+  renderNotebook(p);
+  el.notebookPanel.classList.remove('hidden');
+}
+
+function renderNotebook(p) {
+  el.notebookTitle.textContent = p.title;
+  el.notebookTitle.title = p.title;
+  const body = el.notebookBody;
+  body.innerHTML = '';
+
+  const hasGloss = p.glossary && p.glossary.length;
+  const hasEntries = p.entries && p.entries.length;
+  if (!hasGloss && !hasEntries) {
+    body.innerHTML =
+      '<div class="nb-empty">아직 이 논문에 쌓인 게 없어요.<br>문장을 풀이하면 여기에 모여요. 🌿</div>';
+    return;
+  }
+
+  if (hasGloss) {
+    const sec = document.createElement('div');
+    sec.className = 'nb-glossary';
+    const h = document.createElement('div');
+    h.className = 'nb-section-title';
+    h.textContent = `용어집 (${p.glossary.length})`;
+    sec.appendChild(h);
+    for (const g of p.glossary) {
+      const d = document.createElement('div');
+      d.className = 'nb-term';
+      d.innerHTML = `<b>${escapeHtml(g.term)}</b> — ${escapeHtml(g.meaning)}`;
+      sec.appendChild(d);
+    }
+    body.appendChild(sec);
+  }
+
+  if (hasEntries) {
+    const h = document.createElement('div');
+    h.className = 'nb-section-title';
+    h.textContent = `기록 (${p.entries.length})`;
+    body.appendChild(h);
+    for (const e of p.entries) {
+      const div = document.createElement('div');
+      div.className = 'nb-entry';
+
+      const src = document.createElement('div');
+      src.className = 'nb-entry-src';
+      src.textContent =
+        e.mode === 'word' && e.context ? `「${e.text}」 — ${e.context}` : e.text;
+      div.appendChild(src);
+
+      const ans = document.createElement('div');
+      ans.className = 'answer';
+      ans.innerHTML = renderMarkdown(e.answer || '');
+      div.appendChild(ans);
+
+      if (e.followups && e.followups.length) {
+        for (const f of e.followups) {
+          const qa = document.createElement('div');
+          qa.className = 'nb-qa';
+          const q = document.createElement('div');
+          q.className = 'nb-q';
+          q.textContent = 'Q. ' + f.q;
+          const a = document.createElement('div');
+          a.className = 'answer';
+          a.innerHTML = renderMarkdown(f.a || '');
+          qa.append(q, a);
+          div.appendChild(qa);
+        }
+      }
+      body.appendChild(div);
+    }
+  }
+  body.scrollTop = 0;
+}
+
+el.paperbar.addEventListener('click', openLibrary);
+el.btnLibraryClose.addEventListener('click', () =>
+  el.libraryPanel.classList.add('hidden')
+);
+el.libNewBtn.addEventListener('click', createPaper);
+el.libNewTitle.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    createPaper();
+  }
+});
+el.btnNotebookBack.addEventListener('click', () =>
+  el.notebookPanel.classList.add('hidden')
+);
+
+// 풀이가 저장될 때마다 표시줄·목록 갱신
+window.api.onPaperUpdated((meta) => {
+  libMeta = meta;
+  refreshPaperbar();
+  if (!el.libraryPanel.classList.contains('hidden')) renderLibList();
+});
+
+// ---------------------------------------------------------------------------
 // 초기화
 // ---------------------------------------------------------------------------
 (async function init() {
+  await loadLib();
   settings = await window.api.getSettings();
   el.modelBadge.textContent = settings.activeModel;
   updateTriggerUI(settings.trigger);

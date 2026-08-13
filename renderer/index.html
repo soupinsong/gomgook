@@ -22,6 +22,14 @@
       </div>
     </header>
 
+    <!-- 현재 논문 표시줄 -->
+    <button id="paperbar" class="paperbar" title="논문 노트 열기">
+      <span class="pb-icon">📁</span>
+      <span id="paper-name" class="pb-name">기본 노트</span>
+      <span id="paper-count" class="pb-count"></span>
+      <span class="pb-caret">▾</span>
+    </button>
+
     <!-- 본문 -->
     <main class="content">
       <!-- 선택된 원문 -->
@@ -146,6 +154,37 @@
       <p class="settings-note">
         키는 이 PC에만 저장됩니다. 언제든 엔진을 무료↔유료로 바꿀 수 있어요.
       </p>
+    </div>
+
+    <!-- 논문 라이브러리 패널 -->
+    <div id="library-panel" class="settings-panel hidden">
+      <div class="settings-header">
+        <h2>📁 논문 노트</h2>
+        <button id="btn-library-close" class="tb-btn">✕</button>
+      </div>
+      <div class="lib-new">
+        <input
+          id="lib-new-title"
+          type="text"
+          placeholder="새 논문 이름 (예: Vitessce 논문)"
+          autocomplete="off"
+        />
+        <button id="lib-new-btn" class="lib-new-btn">＋ 만들기</button>
+      </div>
+      <p class="lib-hint">
+        논문을 고르면, 이후 풀이가 그 논문에 쌓이고 용어도 이어서 기억해요.
+      </p>
+      <div id="lib-list" class="lib-list"></div>
+    </div>
+
+    <!-- 노트 보기 패널 -->
+    <div id="notebook-panel" class="settings-panel hidden">
+      <div class="settings-header">
+        <button id="btn-notebook-back" class="tb-btn">←</button>
+        <h2 id="notebook-title">노트</h2>
+        <span style="width: 27px"></span>
+      </div>
+      <div id="notebook-body" class="notebook-body"></div>
     </div>
 
     <script src="renderer.js"></script>

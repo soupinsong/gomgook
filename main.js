@@ -102,6 +102,181 @@ function currentModel() {
 }
 
 // ---------------------------------------------------------------------------
+// 논문 노트 라이브러리 (userData/papers.json)
+//   논문마다 폴더처럼: 풀이 기록(entries) + 누적 용어집(glossary)
+// ---------------------------------------------------------------------------
+const LIB_PATH = path.join(app.getPath('userData'), 'papers.json');
+
+function loadLibrary() {
+  try {
+    const j = JSON.parse(fs.readFileSync(LIB_PATH, 'utf8'));
+    if (j && Array.isArray(j.papers)) return j;
+  } catch {
+    /* 새로 시작 */
+  }
+  return { papers: [], currentId: null };
+}
+
+let library = loadLibrary();
+let lastEntryId = null;
+
+function saveLibrary() {
+  try {
+    fs.writeFileSync(LIB_PATH, JSON.stringify(library, null, 2), 'utf8');
+  } catch {
+    /* ignore */
+  }
+}
+
+function genId() {
+  return 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+}
+
+function newPaper(title) {
+  return {
+    id: genId(),
+    title: title || '새 논문',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    glossary: [], // [{term, meaning}]
+    entries: [], // [{id, time, mode, text, context, answer, followups:[{q,a}]}]
+  };
+}
+
+function ensureCurrentPaper() {
+  if (!library.papers.length) {
+    const p = newPaper('기본 노트');
+    library.papers.push(p);
+    library.currentId = p.id;
+    saveLibrary();
+  }
+  if (!library.currentId || !library.papers.find((p) => p.id === library.currentId)) {
+    library.currentId = library.papers[0].id;
+    saveLibrary();
+  }
+  return library.papers.find((p) => p.id === library.currentId);
+}
+
+function currentPaper() {
+  return ensureCurrentPaper();
+}
+
+// 답변에서 "용어 — 뜻" 뽑아 논문 용어집에 누적 (추가 AI 호출 없이 파싱)
+function extractGlossary(answer, mode, text) {
+  const out = [];
+  const lines = String(answer || '').split('\n');
+  let section = '';
+  for (const raw of lines) {
+    const t = raw.trim();
+    if (t.startsWith('## ')) {
+      section = t.slice(3);
+      continue;
+    }
+    const isTermSection = /핵심 용어/.test(section);
+    const isWordSection = /이 문맥에서의 뜻/.test(section);
+    if ((t.startsWith('- ') || t.startsWith('* ')) && (isTermSection || isWordSection)) {
+      const body = t.slice(2).trim().replace(/\*\*/g, '');
+      if (isWordSection && mode === 'word') {
+        // 단어 모드: 고른 단어 = term, 이 줄 = 뜻
+        const meaning = body.split(/\s*\/\s*/)[0].trim();
+        if (text && meaning) out.push({ term: text.trim(), meaning: meaning.slice(0, 140) });
+      } else {
+        const m = body.split(/\s[—–-]\s|:\s/);
+        if (m.length >= 2) {
+          const term = m[0].trim();
+          const meaning = body.slice(body.indexOf(m[1])).trim();
+          if (term && meaning && term.length <= 40) {
+            out.push({ term, meaning: meaning.slice(0, 140) });
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function mergeGlossary(paper, items) {
+  for (const it of items) {
+    const key = it.term.toLowerCase();
+    const ex = paper.glossary.find((g) => g.term.toLowerCase() === key);
+    if (ex) ex.meaning = it.meaning;
+    else paper.glossary.push(it);
+  }
+  if (paper.glossary.length > 400) paper.glossary = paper.glossary.slice(-400);
+}
+
+function saveEntry(text, context, answer) {
+  const p = currentPaper();
+  const mode = context ? 'word' : 'sentence';
+  const entry = {
+    id: genId(),
+    time: Date.now(),
+    mode,
+    text,
+    context: context || '',
+    answer,
+    followups: [],
+  };
+  p.entries.push(entry);
+  mergeGlossary(p, extractGlossary(answer, mode, text));
+  p.updatedAt = Date.now();
+  lastEntryId = entry.id;
+  saveLibrary();
+}
+
+function appendFollowup(question, answer) {
+  const p = currentPaper();
+  const e =
+    p.entries.find((x) => x.id === lastEntryId) || p.entries[p.entries.length - 1];
+  if (e) {
+    e.followups.push({ q: question, a: answer });
+    p.updatedAt = Date.now();
+    saveLibrary();
+  }
+}
+
+// 지금 논문의 누적 지식을 프롬프트에 넣을 맥락 문자열
+function paperContextText() {
+  const p = currentPaper();
+  const parts = [];
+  if (p.glossary && p.glossary.length) {
+    const g = p.glossary
+      .slice(-50)
+      .map((x) => `${x.term}=${x.meaning}`)
+      .join(' · ');
+    parts.push(`[이미 정리한 용어] ${g}`);
+  }
+  const recent = (p.entries || [])
+    .slice(-8)
+    .map((e) => e.text)
+    .filter(Boolean)
+    .map((s) => (s.length > 60 ? s.slice(0, 60) + '…' : s));
+  if (recent.length) parts.push(`[최근 본 문장/단어] ${recent.join(' / ')}`);
+  if (!parts.length) return '';
+  return (
+    `\n\n지금 사용자는 "${p.title}" 논문을 한 문장씩 읽는 중이야. ` +
+    `아래 맥락을 참고해서 앞뒤 흐름을 잇고, 이미 정의한 용어는 같은 뜻으로 일관되게 설명해:\n` +
+    parts.join('\n')
+  );
+}
+
+function papersMeta() {
+  return {
+    currentId: library.currentId,
+    papers: library.papers
+      .slice()
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((p) => ({
+        id: p.id,
+        title: p.title,
+        count: p.entries.length,
+        terms: p.glossary.length,
+        updatedAt: p.updatedAt,
+      })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 윈도우
 // ---------------------------------------------------------------------------
 let win = null;
@@ -308,13 +483,16 @@ function buildSystemPrompt() {
   ].join('\n');
 }
 
-// 일반 모드 첫 메시지 (형식 포함)
+// 일반 모드 첫 메시지 (형식 포함) — 영어 초보용 직독직해 + 의역 함께
 function userMessage(text) {
   return [
-    `다음 텍스트를 아래 형식으로 풀어서 설명해줘:`,
+    `다음 텍스트를 영어 초보자도 이해하도록 아래 형식으로 풀어줘:`,
     ``,
-    `## 번역`,
-    `- 자연스러운 한국어 번역 (이미 한국어면 핵심을 한 줄로).`,
+    `## 직독직해`,
+    `- 영어 어순 그대로, 끊어읽는 단위로 "«영어 구» → 한국어 뜻" 처럼 짚어줘. 문장 구조가 눈에 보이게.`,
+    `- 이미 한국어 텍스트면 이 항목은 생략.`,
+    `## 의역`,
+    `- 자연스러운 한국어 번역 한 문장.`,
     `## 핵심 용어`,
     `- 중요한 전문용어마다 "용어 — 이 문맥에서의 뜻 / 쉬운 설명" (최대 4~5개).`,
     `## 한 줄 정리`,
@@ -599,7 +777,7 @@ async function converse(event, requestId) {
       requestId,
       message: `${name} API 키가 없습니다. 설정(⚙)에서 키를 입력해 주세요.`,
     });
-    return;
+    return null;
   }
   const full =
     provider === 'gemini'
@@ -610,11 +788,13 @@ async function converse(event, requestId) {
     convo.turns.push({ role: 'assistant', content: full });
     event.sender.send('lookup-done', { requestId });
   }
+  return full;
 }
 
-// 새 조회 (문장/단어 선택)
+// 새 조회 (문장/단어 선택) — 답을 현재 논문 노트에 저장
 async function runLookup(event, requestId, text, context) {
-  const system = buildSystemPrompt();
+  // 페르소나 + 이 논문에서 누적한 용어·맥락
+  const system = buildSystemPrompt() + paperContextText();
   const firstUser =
     context && context !== text
       ? userMessageWord(text, context)
@@ -628,10 +808,14 @@ async function runLookup(event, requestId, text, context) {
     });
   }
 
-  return converse(event, requestId);
+  const full = await converse(event, requestId);
+  if (full != null) {
+    saveEntry(text, context && context !== text ? context : '', full);
+    event.sender.send('paper-updated', papersMeta());
+  }
 }
 
-// 추가 질문 (이전 대화 맥락 유지)
+// 추가 질문 (이전 대화 맥락 유지) — 답을 직전 기록에 이어 저장
 async function runAsk(event, requestId, question) {
   if (!convo.turns.length) {
     event.sender.send('lookup-error', {
@@ -641,7 +825,11 @@ async function runAsk(event, requestId, question) {
     return;
   }
   convo.turns.push({ role: 'user', content: question });
-  return converse(event, requestId);
+  const full = await converse(event, requestId);
+  if (full != null) {
+    appendFollowup(question, full);
+    event.sender.send('paper-updated', papersMeta());
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -681,6 +869,54 @@ ipcMain.on('ask', (event, { requestId, question }) => {
   runAsk(event, requestId, question);
 });
 
+// ── 논문 노트 라이브러리 IPC ──
+ipcMain.handle('lib-list', () => {
+  ensureCurrentPaper();
+  return papersMeta();
+});
+
+ipcMain.handle('lib-create', (_e, title) => {
+  const p = newPaper((title || '').trim() || '새 논문');
+  library.papers.push(p);
+  library.currentId = p.id;
+  lastEntryId = null;
+  saveLibrary();
+  return papersMeta();
+});
+
+ipcMain.handle('lib-select', (_e, id) => {
+  if (library.papers.find((p) => p.id === id)) {
+    library.currentId = id;
+    lastEntryId = null;
+    saveLibrary();
+  }
+  return papersMeta();
+});
+
+ipcMain.handle('lib-rename', (_e, { id, title }) => {
+  const p = library.papers.find((x) => x.id === id);
+  if (p) {
+    p.title = (title || '').trim() || p.title;
+    p.updatedAt = Date.now();
+    saveLibrary();
+  }
+  return papersMeta();
+});
+
+ipcMain.handle('lib-delete', (_e, id) => {
+  library.papers = library.papers.filter((p) => p.id !== id);
+  if (library.currentId === id) library.currentId = null;
+  lastEntryId = null;
+  ensureCurrentPaper();
+  saveLibrary();
+  return papersMeta();
+});
+
+ipcMain.handle('lib-get', (_e, id) => {
+  const p = library.papers.find((x) => x.id === id) || currentPaper();
+  return { id: p.id, title: p.title, glossary: p.glossary, entries: p.entries };
+});
+
 ipcMain.handle('list-gemini-models', async () => {
   const key = settings.gemini.apiKey || process.env.GEMINI_API_KEY || '';
   if (!key) {
@@ -713,6 +949,7 @@ ipcMain.handle('toggle-pin', () => {
 // 앱 라이프사이클
 // ---------------------------------------------------------------------------
 app.whenReady().then(() => {
+  ensureCurrentPaper();
   createWindow();
   startClipboardWatch();
   applyHotkey();

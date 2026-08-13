@@ -112,6 +112,46 @@ body {
   opacity: 0.4;
 }
 
+/* ── 현재 논문 표시줄 ─────────────────────── */
+.paperbar {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 12px;
+  background: var(--bg-2);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 12.5px;
+  text-align: left;
+  transition: background 0.12s;
+}
+.paperbar:hover {
+  background: var(--bg-3);
+}
+.pb-icon {
+  font-size: 13px;
+}
+.pb-name {
+  font-weight: 600;
+  color: var(--green-bright);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.pb-count {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.pb-caret {
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
 /* ── 본문 ────────────────────────────────── */
 .content {
   flex: 1;
@@ -455,6 +495,179 @@ body {
   padding: 1px 5px;
   border-radius: 5px;
   color: #cfe9d7;
+}
+
+/* ── 논문 라이브러리 ─────────────────────── */
+.lib-new {
+  display: flex;
+  gap: 7px;
+  margin-bottom: 10px;
+}
+.lib-new input {
+  flex: 1;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 11px;
+  color: var(--fg);
+  font-size: 13px;
+}
+.lib-new input:focus {
+  outline: none;
+  border-color: var(--green-2);
+  box-shadow: 0 0 0 3px rgba(47, 125, 79, 0.18);
+}
+.lib-new-btn {
+  background: var(--green);
+  color: #f2fbf4;
+  border: none;
+  border-radius: 9px;
+  padding: 0 13px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+.lib-new-btn:hover {
+  background: var(--green-2);
+}
+.lib-hint {
+  font-size: 11px;
+  color: var(--fg-dim);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+.lib-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.paper-row {
+  background: var(--bg-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 11px;
+}
+.paper-row.current {
+  border-color: var(--green);
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.paper-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.paper-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.paper-title:hover {
+  color: var(--green-bright);
+}
+.paper-title-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-2);
+  border: 1px solid var(--green-2);
+  border-radius: 7px;
+  padding: 4px 8px;
+  color: var(--fg);
+  font-size: 13px;
+}
+.paper-title-input:focus {
+  outline: none;
+}
+.paper-row .mini {
+  background: transparent;
+  border: none;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 3px 5px;
+  border-radius: 6px;
+}
+.paper-row .mini:hover {
+  background: var(--bg-3);
+  color: var(--fg);
+}
+.paper-meta {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+.paper-meta .cur-tag {
+  color: var(--green-bright);
+  font-weight: 600;
+}
+
+/* ── 노트 보기 ───────────────────────────── */
+.notebook-body {
+  font-size: 13px;
+}
+.nb-section-title {
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--green-bright);
+  font-weight: 700;
+  margin: 4px 0 8px;
+}
+.nb-glossary {
+  background: var(--bg-1);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.nb-term {
+  margin: 5px 0;
+  line-height: 1.5;
+}
+.nb-term b {
+  color: var(--accent-2);
+}
+.nb-entry {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+.nb-entry:first-child {
+  border-top: none;
+}
+.nb-entry-src {
+  font-size: 12px;
+  color: var(--fg-dim);
+  background: var(--bg-1);
+  border-left: 3px solid var(--green);
+  border-radius: 6px;
+  padding: 6px 9px;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.nb-qa {
+  margin-top: 8px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+.nb-q {
+  font-size: 12.5px;
+  color: var(--green-bright);
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.nb-empty {
+  color: var(--fg-dim);
+  text-align: center;
+  padding: 30px 12px;
+  font-size: 13px;
 }
 
 /* ── 스크롤바 ────────────────────────────── */
