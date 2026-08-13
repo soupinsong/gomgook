@@ -1,8 +1,17 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, clipboard, screen, shell } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  clipboard,
+  screen,
+  shell,
+  globalShortcut,
+} = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const Anthropic = require('@anthropic-ai/sdk');
 
 // ---------------------------------------------------------------------------
@@ -24,7 +33,13 @@ const DEFAULT_SETTINGS = {
   },
   level: '고등학교 1학년',
   domains: ['생물학', '정보학(생물정보학)', '유전체학'],
-  autoLookup: true,
+  // 'apps'  = 지정한 프로그램이 맨 앞일 때 복사하면 풀이 (그 외 앱은 조용)
+  // 'auto'  = 어떤 앱에서든 복사하면 바로 풀이
+  // 'hotkey'= 단축키를 눌렀을 때만 풀이
+  trigger: 'apps',
+  hotkey: 'Ctrl+Shift+Space',
+  // 감지할 프로그램(프로세스 이름 일부, 소문자). 삼성 노트 + 대표 PDF 리더.
+  apps: ['samsungnotes', 'acrobat', 'acrord32', 'foxit', 'sumatra', 'hwp', 'pdf'],
   minChars: 2,
   maxChars: 4000,
 };
@@ -53,8 +68,13 @@ function mergeSettings(base, override) {
 
 function loadSettings() {
   try {
-    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-    return mergeSettings(DEFAULT_SETTINGS, JSON.parse(raw));
+    const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    const merged = mergeSettings(DEFAULT_SETTINGS, parsed);
+    // 이 기능 이전 설정('apps' 키 없음) → 새 권장 모드(특정 앱)로 이동
+    if (!Object.prototype.hasOwnProperty.call(parsed, 'apps')) {
+      merged.trigger = 'apps';
+    }
+    return merged;
   } catch {
     return mergeSettings(DEFAULT_SETTINGS, {});
   }
@@ -120,14 +140,114 @@ function createWindow() {
 }
 
 // ---------------------------------------------------------------------------
+// 맨 앞(포커스) 프로그램 감지 — 특정 앱에서만 자동 풀이하려고. UWP(스토어앱)도 처리.
+// ---------------------------------------------------------------------------
+const FG_PS = [
+  'Add-Type -Language CSharp -TypeDefinition @"',
+  'using System;',
+  'using System.Text;',
+  'using System.Runtime.InteropServices;',
+  'public class FG {',
+  '  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();',
+  '  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);',
+  '  [DllImport("user32.dll")] static extern int GetClassName(IntPtr hWnd, StringBuilder s, int max);',
+  '  delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr l);',
+  '  [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc cb, IntPtr l);',
+  '  public static int Pid() {',
+  '    IntPtr h = GetForegroundWindow();',
+  '    uint pid; GetWindowThreadProcessId(h, out pid);',
+  '    uint real = pid;',
+  '    EnumChildWindows(h, (c, l) => {',
+  '      var sb = new StringBuilder(256); GetClassName(c, sb, 256);',
+  '      if (sb.ToString() == "Windows.UI.Core.CoreWindow") {',
+  '        uint cpid; GetWindowThreadProcessId(c, out cpid);',
+  '        real = cpid; return false;',
+  '      }',
+  '      return true;',
+  '    }, IntPtr.Zero);',
+  '    return (int)real;',
+  '  }',
+  '}',
+  '"@',
+  '$p = [FG]::Pid()',
+  '(Get-Process -Id $p).ProcessName',
+].join('\r\n');
+
+let fgScriptPath = null;
+function ensureFgScript() {
+  if (fgScriptPath) return fgScriptPath;
+  try {
+    const p = path.join(app.getPath('userData'), 'fg.ps1');
+    fs.writeFileSync(p, FG_PS, 'utf8');
+    fgScriptPath = p;
+  } catch {
+    fgScriptPath = null;
+  }
+  return fgScriptPath;
+}
+
+function getForegroundApp() {
+  return new Promise((resolve) => {
+    const script = ensureFgScript();
+    if (!script) return resolve(null);
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script],
+      { timeout: 3000, windowsHide: true },
+      (err, stdout) => {
+        if (err) return resolve(null);
+        const name = String(stdout || '').trim();
+        resolve(name || null);
+      }
+    );
+  });
+}
+
+function appAllowed(name) {
+  if (!name) return false; // 감지 실패 → 조용히 skip
+  const lower = name.toLowerCase();
+  return (settings.apps || []).some((a) => a && lower.includes(String(a).toLowerCase()));
+}
+
+// ---------------------------------------------------------------------------
 // 클립보드 감시
 // ---------------------------------------------------------------------------
 let lastClipboard = clipboard.readText();
 let clipboardTimer = null;
+let fgBusy = false;
+let lastSkippedApp = '';
+
+function emitLookup(trimmed) {
+  win.webContents.send('clipboard-change', {
+    text: trimmed.slice(0, settings.maxChars),
+    autoLookup: true,
+  });
+}
+
+async function handleClipboardChange(trimmed) {
+  if (settings.trigger === 'auto') {
+    emitLookup(trimmed);
+    return;
+  }
+  if (settings.trigger === 'apps') {
+    if (fgBusy) return;
+    fgBusy = true;
+    const name = await getForegroundApp();
+    fgBusy = false;
+    if (appAllowed(name)) {
+      emitLookup(trimmed);
+    } else {
+      lastSkippedApp = name || '';
+      if (win) win.webContents.send('app-skipped', { name: name || '' });
+    }
+  }
+  // 'hotkey' 모드는 여기서 아무것도 안 함 (단축키가 처리)
+}
 
 function startClipboardWatch() {
   clipboardTimer = setInterval(() => {
     if (!win) return;
+    if (settings.trigger === 'hotkey') return; // 폴링 불필요
     let text = '';
     try {
       text = clipboard.readText();
@@ -137,14 +257,39 @@ function startClipboardWatch() {
     if (text && text !== lastClipboard) {
       lastClipboard = text;
       const trimmed = text.trim();
-      if (trimmed.length >= settings.minChars) {
-        win.webContents.send('clipboard-change', {
-          text: trimmed.slice(0, settings.maxChars),
-          autoLookup: settings.autoLookup,
-        });
-      }
+      if (trimmed.length >= settings.minChars) handleClipboardChange(trimmed);
     }
   }, 400);
+}
+
+// 전역 단축키: 눌렀을 때 클립보드의 텍스트를 풀이
+function applyHotkey() {
+  try {
+    globalShortcut.unregisterAll();
+  } catch {
+    /* ignore */
+  }
+  if (settings.trigger !== 'hotkey' || !settings.hotkey) return true;
+  try {
+    return globalShortcut.register(settings.hotkey, () => {
+      if (!win) return;
+      let text = '';
+      try {
+        text = clipboard.readText();
+      } catch {
+        /* ignore */
+      }
+      const t = (text || '').trim();
+      win.showInactive(); // 최소화돼 있으면 다시 보이게 (포커스는 뺏지 않음)
+      if (t.length >= settings.minChars) {
+        win.webContents.send('hotkey-lookup', { text: t.slice(0, settings.maxChars) });
+      } else {
+        win.webContents.send('hotkey-empty');
+      }
+    });
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -508,6 +653,7 @@ function settingsForRenderer() {
     hasEnvGemini: !!process.env.GEMINI_API_KEY,
     hasEnvClaude: !!process.env.ANTHROPIC_API_KEY,
     activeModel: currentModel(),
+    lastSkippedApp,
   };
 }
 
@@ -515,7 +661,16 @@ ipcMain.handle('get-settings', () => settingsForRenderer());
 
 ipcMain.handle('save-settings', (_e, next) => {
   settings = saveSettings(next);
+  applyHotkey();
   return settingsForRenderer();
+});
+
+ipcMain.handle('toggle-trigger', () => {
+  const order = ['apps', 'auto', 'hotkey'];
+  const next = order[(order.indexOf(settings.trigger) + 1) % order.length];
+  settings = saveSettings({ trigger: next });
+  applyHotkey();
+  return next;
 });
 
 ipcMain.on('lookup', (event, { requestId, text, context }) => {
@@ -560,9 +715,18 @@ ipcMain.handle('toggle-pin', () => {
 app.whenReady().then(() => {
   createWindow();
   startClipboardWatch();
+  applyHotkey();
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('will-quit', () => {
+  try {
+    globalShortcut.unregisterAll();
+  } catch {
+    /* ignore */
+  }
 });
 
 app.on('window-all-closed', () => {

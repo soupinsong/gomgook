@@ -17,6 +17,7 @@ const el = {
   status: $('status'),
   modelBadge: $('model-badge'),
   // 타이틀바
+  btnTrigger: $('btn-trigger'),
   btnPin: $('btn-pin'),
   btnSettings: $('btn-settings'),
   btnMin: $('btn-min'),
@@ -35,8 +36,13 @@ const el = {
   inClaudeModel: $('in-claude-model'),
   envHintGemini: $('env-hint-gemini'),
   envHintClaude: $('env-hint-claude'),
+  inTrigger: $('in-trigger'),
+  inHotkey: $('in-hotkey'),
+  fieldHotkey: $('field-hotkey'),
+  inApps: $('in-apps'),
+  fieldApps: $('field-apps'),
+  appsSkipped: $('apps-skipped'),
   inLevel: $('in-level'),
-  inAuto: $('in-auto'),
   btnSave: $('btn-save'),
 };
 
@@ -104,6 +110,33 @@ function renderMarkdown(md) {
 
 function setStatus(text) {
   el.status.textContent = text;
+}
+
+// 감지 방식에 따라 타이틀바 버튼·안내문 갱신 (3가지 모드)
+function updateTriggerUI(trigger) {
+  const hotkey = (settings && settings.hotkey) || 'Ctrl+Shift+Space';
+  if (trigger === 'auto') {
+    el.btnTrigger.textContent = '📋';
+    el.btnTrigger.title = '감지: 아무 앱에서나 복사 (눌러서 다음 모드로)';
+    el.emptyState.innerHTML =
+      '<p>🌿 어느 앱에서든 <b>복사(Ctrl+C)</b>만 하면</p>' +
+      '<p>바로 번역하고 쉽게 풀어 드릴게요.</p>';
+  } else if (trigger === 'hotkey') {
+    el.btnTrigger.textContent = '⌨';
+    el.btnTrigger.title = '감지: 단축키만 (눌러서 다음 모드로)';
+    el.emptyState.innerHTML =
+      `<p>🌿 텍스트를 <b>복사(Ctrl+C)</b>한 다음</p>` +
+      `<p><b>${escapeHtml(hotkey)}</b> 를 눌러 주세요.</p>` +
+      `<p style="opacity:.65;font-size:12px;margin-top:12px">다른 앱에서 복사할 땐 조용히 있을게요.</p>`;
+  } else {
+    // apps
+    el.btnTrigger.textContent = '📖';
+    el.btnTrigger.title = '감지: 특정 앱에서만 (눌러서 다음 모드로)';
+    el.emptyState.innerHTML =
+      '<p>🌿 <b>삼성 노트·PDF 리더</b>에서</p>' +
+      '<p><b>복사(Ctrl+C)</b>하면 바로 풀어 드릴게요.</p>' +
+      '<p style="opacity:.65;font-size:12px;margin-top:12px">카톡·브라우저 등에서 복사할 땐 조용히 있을게요.</p>';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -251,6 +284,46 @@ window.api.onClipboard(({ text, autoLookup }) => {
   }
 });
 
+// 단축키로 풀이 요청
+window.api.onHotkeyLookup(({ text }) => {
+  el.emptyState.classList.add('hidden');
+  handleSelection(text);
+});
+window.api.onHotkeyEmpty(() => {
+  setStatus('복사된 텍스트가 없어요 — 먼저 Ctrl+C 로 복사하세요');
+});
+
+// 'apps' 모드에서 감지 대상이 아닌 앱에서 복사됨 → 어떤 앱인지 알려줌
+window.api.onAppSkipped(({ name }) => {
+  if (settings) settings.lastSkippedApp = name || '';
+  if (name) {
+    setStatus(`${name} 은(는) 감지 대상이 아니에요 (설정에서 추가 가능)`);
+  }
+  renderSkippedHint();
+});
+
+// 설정 열려있을 때 "최근 건너뛴 앱: X [추가]" 표시
+function renderSkippedHint() {
+  if (!el.appsSkipped) return;
+  const name = settings && settings.lastSkippedApp;
+  if (!name) {
+    el.appsSkipped.textContent = '';
+    return;
+  }
+  el.appsSkipped.innerHTML =
+    `최근 건너뛴 앱: <b>${escapeHtml(name)}</b> · <a id="add-skipped">목록에 추가</a>`;
+  const a = document.getElementById('add-skipped');
+  if (a)
+    a.addEventListener('click', () => {
+      const cur = el.inApps.value.trim();
+      const item = name.toLowerCase();
+      const list = cur ? cur.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      if (!list.map((s) => s.toLowerCase()).includes(item)) list.push(item);
+      el.inApps.value = list.join(', ');
+      el.appsSkipped.textContent = `추가됨: ${name} (저장을 눌러 적용)`;
+    });
+}
+
 // 예시 이미지 수신
 window.api.onImage(({ requestId, dataUrl, title, pageUrl }) => {
   if (requestId !== currentRequestId) return;
@@ -281,6 +354,12 @@ el.btnPin.addEventListener('click', async () => {
   el.btnPin.classList.toggle('pin-off', !pinned);
   el.btnPin.title = pinned ? '항상 위 고정: 켜짐' : '항상 위 고정: 꺼짐';
 });
+el.btnTrigger.addEventListener('click', async () => {
+  const trigger = await window.api.toggleTrigger();
+  if (settings) settings.trigger = trigger;
+  updateTriggerUI(trigger);
+  setStatus(trigger === 'auto' ? '복사 자동 감지 켜짐' : '단축키 모드 (조용함)');
+});
 
 // ---------------------------------------------------------------------------
 // 설정
@@ -289,6 +368,12 @@ function syncProviderBlocks() {
   const isGemini = el.inProvider.value === 'gemini';
   el.blockGemini.classList.toggle('hidden', !isGemini);
   el.blockClaude.classList.toggle('hidden', isGemini);
+}
+
+function syncTriggerFields() {
+  const t = el.inTrigger.value;
+  el.fieldHotkey.classList.toggle('hidden', t !== 'hotkey');
+  el.fieldApps.classList.toggle('hidden', t !== 'apps');
 }
 
 // 내 키로 실제 사용 가능한 Gemini 모델을 불러와 드롭다운 채우기
@@ -323,7 +408,11 @@ function openSettings() {
   el.inClaudeKey.value = settings.claude.apiKey || '';
   el.inClaudeModel.value = settings.claude.model;
   el.inLevel.value = settings.level;
-  el.inAuto.checked = settings.autoLookup;
+  el.inTrigger.value = settings.trigger;
+  el.inHotkey.value = settings.hotkey || 'Ctrl+Shift+Space';
+  el.inApps.value = (settings.apps || []).join(', ');
+  syncTriggerFields();
+  renderSkippedHint();
   el.envHintGemini.textContent = settings.hasEnvGemini
     ? '환경변수 GEMINI_API_KEY 감지됨 (비워두면 이 값 사용)'
     : '';
@@ -344,6 +433,7 @@ el.inProvider.addEventListener('change', () => {
   if (el.inProvider.value === 'gemini') refreshGeminiModels();
 });
 el.btnRefreshModels.addEventListener('click', refreshGeminiModels);
+el.inTrigger.addEventListener('change', syncTriggerFields);
 
 // 모델이 막혀 자동 교체되면 배지·상태 갱신
 window.api.onModelChanged(({ model }) => {
@@ -371,9 +461,15 @@ el.btnSave.addEventListener('click', async () => {
       model: el.inClaudeModel.value,
     },
     level: el.inLevel.value.trim() || '고등학교 1학년',
-    autoLookup: el.inAuto.checked,
+    trigger: el.inTrigger.value,
+    hotkey: el.inHotkey.value.trim() || 'Ctrl+Shift+Space',
+    apps: el.inApps.value
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
   });
   el.modelBadge.textContent = settings.activeModel;
+  updateTriggerUI(settings.trigger);
   el.panel.classList.add('hidden');
   setStatus('설정 저장됨');
 });
@@ -384,6 +480,7 @@ el.btnSave.addEventListener('click', async () => {
 (async function init() {
   settings = await window.api.getSettings();
   el.modelBadge.textContent = settings.activeModel;
+  updateTriggerUI(settings.trigger);
   const hasKey =
     settings.provider === 'gemini'
       ? settings.gemini.apiKey || settings.hasEnvGemini

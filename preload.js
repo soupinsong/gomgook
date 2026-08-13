@@ -13,10 +13,16 @@ contextBridge.exposeInMainWorld('api', {
   close: () => ipcRenderer.send('window-close'),
   minimize: () => ipcRenderer.send('window-minimize'),
   togglePin: () => ipcRenderer.invoke('toggle-pin'),
+  toggleTrigger: () => ipcRenderer.invoke('toggle-trigger'),
 
-  // 클립보드 감지
+  // 트리거 (클립보드 자동 / 단축키)
   onClipboard: (cb) =>
     ipcRenderer.on('clipboard-change', (_e, payload) => cb(payload)),
+  onHotkeyLookup: (cb) =>
+    ipcRenderer.on('hotkey-lookup', (_e, payload) => cb(payload)),
+  onHotkeyEmpty: (cb) => ipcRenderer.on('hotkey-empty', () => cb()),
+  onAppSkipped: (cb) =>
+    ipcRenderer.on('app-skipped', (_e, payload) => cb(payload)),
 
   // 조회 (스트리밍)
   lookup: (requestId, text, context) =>

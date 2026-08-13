@@ -12,8 +12,9 @@
   <body>
     <!-- 상단 바 (드래그로 이동) -->
     <header class="titlebar">
-      <div class="title">📎 딸깍 사전</div>
+      <div class="title"><span class="dot">🌿</span> 논문을 거꾸로 하면 곰국</div>
       <div class="titlebar-buttons">
+        <button id="btn-trigger" class="tb-btn" title="감지 방식">⌨</button>
         <button id="btn-pin" class="tb-btn" title="항상 위 고정 켜기/끄기">📌</button>
         <button id="btn-settings" class="tb-btn" title="설정">⚙</button>
         <button id="btn-min" class="tb-btn" title="최소화">—</button>
@@ -50,7 +51,7 @@
       <input
         id="followup-input"
         type="text"
-        placeholder="이 단어에 대해 더 물어보기…"
+        placeholder="궁금한 걸 이어서 물어보세요…"
         autocomplete="off"
       />
       <button id="followup-send" class="followup-send" title="보내기">➤</button>
@@ -58,7 +59,7 @@
 
     <!-- 상태 표시줄 -->
     <footer class="statusbar">
-      <span id="status">준비됨</span>
+      <span id="status">준비됐어요 🌿</span>
       <span id="model-badge" class="model-badge"></span>
     </footer>
 
@@ -117,12 +118,29 @@
       </div>
 
       <label class="field">
+        <span>감지 방식</span>
+        <select id="in-trigger">
+          <option value="apps">특정 앱에서 복사 시 (삼성노트·PDF 등 · 권장)</option>
+          <option value="auto">아무 앱에서나 복사하면</option>
+          <option value="hotkey">단축키를 눌렀을 때만</option>
+        </select>
+      </label>
+      <label class="field" id="field-apps">
+        <span>감지할 프로그램</span>
+        <input id="in-apps" type="text" placeholder="samsungnotes, acrobat, foxit …" />
+        <small class="hint">프로그램 이름 일부를 쉼표로 구분 (대소문자 무관).</small>
+        <small id="apps-skipped" class="hint"></small>
+      </label>
+      <label class="field" id="field-hotkey">
+        <span>단축키</span>
+        <input id="in-hotkey" type="text" placeholder="예: Ctrl+Shift+Space" />
+        <small class="hint">
+          텍스트를 복사한 뒤 이 조합을 누르면 풀이해요. (Ctrl / Alt / Shift + 키)
+        </small>
+      </label>
+      <label class="field">
         <span>설명 눈높이</span>
         <input id="in-level" type="text" placeholder="예: 고등학교 1학년" />
-      </label>
-      <label class="field checkbox">
-        <input id="in-auto" type="checkbox" />
-        <span>복사하면 자동으로 풀이 시작</span>
       </label>
       <button id="btn-save" class="save-btn">저장</button>
       <p class="settings-note">
